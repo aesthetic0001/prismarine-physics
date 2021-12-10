@@ -565,7 +565,7 @@ function Physics (mcData, world) {
 
         let xDist = pos1.x - pos2.x
         let zDist = pos1.z - pos2.z
-        let maxDist = math.abs_max(xDist, zDist)
+        let maxDist = util.abs_max(xDist, zDist)
 
         if (maxDist >= 0.01) {
           maxDist = Math.sqrt(maxDist) // Don't know how the following gets the right value but it works so...
