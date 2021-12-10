@@ -1,53 +1,10 @@
 const Vec3 = require('vec3').Vec3
 const AABB = require('./lib/aabb')
-const math = require('./lib/math')
+const util = require('./lib/util') // Math and Attributes
 const features = require('./lib/features')
 
-const physics = {
-  gravity: 0.08, // blocks/tick^2 https://minecraft.gamepedia.com/Entity#Motion_of_entities
-  airdrag: Math.fround(1 - 0.02), // actually (1 - drag)
-  yawSpeed: 3.0,
-  sprintSpeed: 1.3,
-  sneakSpeed: 0.3,
-  stepHeight: 0.6, // how much height can the bot step on without jump
-  negligeableVelocity: 0.003, // actually 0.005 for 1.8, but seems fine
-  soulsandSpeed: 0.4,
-  honeyblockSpeed: 0.4,
-  honeyblockJumpSpeed: 0.4,
-  ladderMaxSpeed: 0.15,
-  ladderClimbSpeed: 0.2,
-  playerHalfWidth: 0.3,
-  playerHeight: 1.8,
-  waterInertia: 0.8,
-  lavaInertia: 0.5,
-  liquidAcceleration: 0.02,
-  airborneInertia: 0.91,
-  airborneAcceleration: 0.02,
-  defaultSlipperiness: 0.6,
-  outOfLiquidImpulse: 0.3,
-  autojumpCooldown: 10, // ticks (0.5s)
-  bubbleColumnSurfaceDrag: {
-    down: 0.03,
-    maxDown: -0.9,
-    up: 0.1,
-    maxUp: 1.8
-  },
-  bubbleColumnDrag: {
-    down: 0.03,
-    maxDown: -0.3,
-    up: 0.06,
-    maxUp: 0.7
-  },
-  slowFalling: 0.125,
-  speedEffect: 1.2,
-  slowEffect: 0.85
-}
-
 function makeSupportFeature (mcData) {
-  return feature => features.some(({
-    name,
-    versions
-  }) => name === feature && versions.includes(mcData.version.majorVersion))
+  return feature => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion))
 }
 
 function Physics (mcData, world) {
@@ -83,12 +40,59 @@ function Physics (mcData, world) {
   const bubblecolumnId = blocksByName.bubble_column ? blocksByName.bubble_column.id : -1 // 1.13+
   if (blocksByName.bubble_column) waterLike.add(bubblecolumnId)
 
+  const physics = {
+    gravity: 0.08, // blocks/tick^2 https://minecraft.gamepedia.com/Entity#Motion_of_entities
+    airdrag: Math.fround(1 - 0.02), // actually (1 - drag)
+    friction: Math.fround(0.216),
+    yawSpeed: 3.0,
+    pitchSpeed: 3.0,
+    playerSpeed: Math.fround(0.1),
+    sprintSpeed: Math.fround(0.3),
+    sneakSpeed: 0.3,
+    stepHeight: 0.6, // how much height can the bot step on without jump
+    negligeableVelocity: 0.003, // actually 0.005 for 1.8, but seems fine
+    soulsandSpeed: 0.4,
+    honeyblockSpeed: 0.4,
+    honeyblockJumpSpeed: 0.4,
+    ladderMaxSpeed: 0.15,
+    ladderClimbSpeed: 0.2,
+    playerHalfWidth: 0.3,
+    playerHeight: 1.8,
+    waterInertia: 0.8,
+    lavaInertia: 0.5,
+    liquidAcceleration: 0.02,
+    airborneInertia: Math.fround(0.91),
+    airborneAcceleration: Math.fround(0.02),
+    defaultSlipperiness: Math.fround(0.6),
+    outOfLiquidImpulse: 0.3,
+    autojumpCooldown: 10, // ticks (0.5s)
+    bubbleColumnSurfaceDrag: {
+      down: 0.03,
+      maxDown: -0.9,
+      up: 0.1,
+      maxUp: 1.8
+    },
+    bubbleColumnDrag: {
+      down: 0.03,
+      maxDown: -0.3,
+      up: 0.06,
+      maxUp: 0.7
+    },
+    slowFalling: 0.125,
+    movementSpeedAttribute: supportFeature('attributesArePrefixed') ? 'minecraft:generic.movement_speed' : 'generic.movementSpeed'
+  }
+
   if (supportFeature('independentLiquidGravity')) {
     physics.waterGravity = 0.02
     physics.lavaGravity = 0.02
   } else if (supportFeature('proportionalLiquidGravity')) {
     physics.waterGravity = physics.gravity / 16
     physics.lavaGravity = physics.gravity / 4
+  }
+
+  function getPlayerBB (pos) {
+    const w = physics.playerHalfWidth
+    return new AABB(-w, 0, -w, w, physics.playerHeight, w).offset(pos.x, pos.y, pos.z)
   }
 
   function setPositionToBB (bb, pos) {
@@ -337,7 +341,7 @@ function Physics (mcData, world) {
 
   function applyHeading (entity, strafe, forward, multiplier) {
     let speed = Math.sqrt(strafe * strafe + forward * forward)
-    if (speed < 0.01) return new Vec3(0, 0, 0)
+    if (speed < 0.001) return new Vec3(0, 0, 0)
 
     speed = multiplier / Math.max(speed, 1)
 
@@ -375,18 +379,34 @@ function Physics (mcData, world) {
       let inertia = physics.airborneInertia
       const blockUnder = world.getBlock(pos.offset(0, -1, 0))
       if (entity.onGround && blockUnder) {
-        inertia = (blockSlipperiness[blockUnder.type] || physics.defaultSlipperiness) * 0.91
-        acceleration = 0.1 * (0.1627714 / (inertia * inertia * inertia))
+        let playerAttributes
+        if (entity.attributes && entity.attributes[physics.movementSpeedAttribute]) {
+          playerAttributes = entity.attributes[physics.movementSpeedAttribute]
+        } else {
+          playerAttributes = util.createAttributeValue(physics.playerSpeed) // default attribute
+        }
+        // Client-side sprinting (don't rely on server-side sprinting)
+        playerAttributes = util.deleteAttributeModifier(playerAttributes, '662a6b8d-da3e-4c1c-8813-96ea6097278d') // always delete sprinting (if it exists)
+        if (entity.control.sprint) {
+          if (!util.checkAttributeModifier(playerAttributes, '662a6b8d-da3e-4c1c-8813-96ea6097278d')) {
+            playerAttributes = util.addAttributeModifier(playerAttributes, {
+              uuid: '662a6b8d-da3e-4c1c-8813-96ea6097278d',
+              amount: physics.sprintSpeed,
+              operation: 2
+            })
+          }
+        }
+        const attributeSpeed = util.getAttributeValue(playerAttributes)
+        inertia = (blockSlipperiness[blockUnder.type] || physics.defaultSlipperiness)
+        acceleration = attributeSpeed * (physics.friction / (inertia * inertia * inertia)) // net.minecraft.world.entity.LivingEntity in getFrictionInfluencedSpeed
+        inertia *= physics.airborneInertia
+        if (acceleration < 0) acceleration = 0
       }
-      if (entity.control.sprint) acceleration *= physics.sprintSpeed
-      if (entity.speed > 0) acceleration *= physics.speedEffect * entity.speed
-      if (entity.slowness > 0) acceleration *= physics.slowEffect * entity.slowness
-
       applyHeading(entity, strafe, forward, acceleration)
 
       if (isOnLadder(world, pos)) {
-        vel.x = math.clamp(-physics.ladderMaxSpeed, vel.x, physics.ladderMaxSpeed)
-        vel.z = math.clamp(-physics.ladderMaxSpeed, vel.z, physics.ladderMaxSpeed)
+        vel.x = util.clamp(-physics.ladderMaxSpeed, vel.x, physics.ladderMaxSpeed)
+        vel.z = util.clamp(-physics.ladderMaxSpeed, vel.z, physics.ladderMaxSpeed)
         vel.y = Math.max(vel.y, entity.control.sneak ? 0 : -physics.ladderMaxSpeed)
       }
 
@@ -535,36 +555,6 @@ function Physics (mcData, world) {
     return isInWater
   }
 
-  function getEntityCollision (theEntity, otherEntity) {
-    // This should always pass, physics tick shouldn't be emitted when bot is on a vehicle & players can't be ridden on
-    if (theEntity.vehicle !== otherEntity && otherEntity.vehicle !== theEntity) {
-      // Need to set noclip flag somewhere (?)
-      if (!theEntity.noClip && !otherEntity.noClip) {
-        const pos1 = theEntity.position
-        const pos2 = otherEntity.position
-
-        let xDist = pos1.x - pos2.x
-        let zDist = pos1.z - pos2.z
-        let maxDist = math.abs_max(xDist, zDist)
-
-        if (maxDist >= 0.01) {
-          maxDist = Math.sqrt(maxDist) // Don't know how the following gets the right value but it works so...
-          xDist = xDist / maxDist
-          zDist = zDist / maxDist
-
-          const multiplier = Math.min(1 / maxDist, 1)
-          xDist = xDist * multiplier * 0.05
-          zDist = zDist * multiplier * 0.05
-          // xDist = xDist * (1 - bot.entity.entityCollisionReduction) // Couldn't find any references, left in here commented because forge has it
-          // zDist = zDist * (1 - bot.entity.entityCollisionReduction)
-
-          return new Vec3(xDist, 0, zDist)
-        }
-      }
-    }
-    return new Vec3(0, 0, 0)
-  }
-
   physics.simulatePlayer = (entity, world) => {
     const vel = entity.vel
     const pos = entity.pos
@@ -579,11 +569,6 @@ function Physics (mcData, world) {
     if (Math.abs(vel.x) < physics.negligeableVelocity) vel.x = 0
     if (Math.abs(vel.y) < physics.negligeableVelocity) vel.y = 0
     if (Math.abs(vel.z) < physics.negligeableVelocity) vel.z = 0
-
-    // Assuming entity = PlayerState
-    for (const intersectingEntity of entity.intersectingEntities) {
-      vel.add(getEntityCollision(entity.bot.entity, intersectingEntity))
-    }
 
     // Handle inputs
     if (entity.control.jump || entity.jumpQueued) {
@@ -622,11 +607,6 @@ function Physics (mcData, world) {
   }
 
   return physics
-}
-
-function getPlayerBB (pos) {
-  const w = physics.playerHalfWidth
-  return new AABB(-w, 0, -w, w, physics.playerHeight, w).offset(pos.x, pos.y, pos.z)
 }
 
 function getEffectLevel (mcData, effectName, effects) {
@@ -681,12 +661,6 @@ function getStatusEffectNamesForVersion (supportFeature) {
   }
 }
 
-function getEntityBB (entity) {
-  const w = entity.width / 2
-  const pos = entity.position
-  return new AABB(-w, 0, -w, w, entity.height, w).offset(pos.x, pos.y, pos.z)
-}
-
 class PlayerState {
   constructor (bot, control) {
     const mcData = require('minecraft-data')(bot.version)
@@ -694,7 +668,6 @@ class PlayerState {
     const supportFeature = makeSupportFeature(mcData)
 
     // Input / Outputs
-    this.bot = bot
     this.pos = bot.entity.position.clone()
     this.vel = bot.entity.velocity.clone()
     this.onGround = bot.entity.onGround
@@ -705,10 +678,9 @@ class PlayerState {
     this.isCollidedVertically = bot.entity.isCollidedVertically
     this.jumpTicks = bot.jumpTicks
     this.jumpQueued = bot.jumpQueued
-    const bb = getPlayerBB(this.pos)
-    this.intersectingEntities = supportFeature('entityCollision') ? Object.values(bot.entities ?? []).filter((e) => e.id !== bot.entity.id && e.type !== 'object' && bb.intersects(getEntityBB(e))) : []
 
     // Input only (not modified)
+    this.attributes = bot.entity.attributes
     this.yaw = bot.entity.yaw
     this.control = control
 
