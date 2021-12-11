@@ -7,39 +7,6 @@ function makeSupportFeature (mcData) {
   return feature => features.some(({ name, versions }) => name === feature && versions.includes(mcData.version.majorVersion))
 }
 
-function Physics (mcData, world) {
-  const supportFeature = makeSupportFeature(mcData)
-  const blocksByName = mcData.blocksByName
-
-  // Block Slipperiness
-  // https://www.mcpk.wiki/w/index.php?title=Slipperiness
-  const blockSlipperiness = {}
-  const slimeBlockId = blocksByName.slime_block ? blocksByName.slime_block.id : blocksByName.slime.id
-  blockSlipperiness[slimeBlockId] = 0.8
-  blockSlipperiness[blocksByName.ice.id] = 0.98
-  blockSlipperiness[blocksByName.packed_ice.id] = 0.98
-  if (blocksByName.frosted_ice) { // 1.9+
-    blockSlipperiness[blocksByName.frosted_ice.id] = 0.98
-  }
-  if (blocksByName.blue_ice) { // 1.13+
-    blockSlipperiness[blocksByName.blue_ice.id] = 0.989
-  }
-
-  // Block ids
-  const soulsandId = blocksByName.soul_sand.id
-  const honeyblockId = blocksByName.honey_block ? blocksByName.honey_block.id : -1 // 1.15+
-  const webId = blocksByName.cobweb ? blocksByName.cobweb.id : blocksByName.web.id
-  const waterId = blocksByName.water.id
-  const lavaId = blocksByName.lava.id
-  const ladderId = blocksByName.ladder.id
-  const vineId = blocksByName.vine.id
-  const waterLike = new Set()
-  if (blocksByName.seagrass) waterLike.add(blocksByName.seagrass.id) // 1.13+
-  if (blocksByName.tall_seagrass) waterLike.add(blocksByName.tall_seagrass.id) // 1.13+
-  if (blocksByName.kelp) waterLike.add(blocksByName.kelp.id) // 1.13+
-  const bubblecolumnId = blocksByName.bubble_column ? blocksByName.bubble_column.id : -1 // 1.13+
-  if (blocksByName.bubble_column) waterLike.add(bubblecolumnId)
-
   const physics = {
     gravity: 0.08, // blocks/tick^2 https://minecraft.gamepedia.com/Entity#Motion_of_entities
     airdrag: Math.fround(1 - 0.02), // actually (1 - drag)
@@ -78,9 +45,43 @@ function Physics (mcData, world) {
       up: 0.06,
       maxUp: 0.7
     },
-    slowFalling: 0.125,
-    movementSpeedAttribute: supportFeature('attributesArePrefixed') ? 'minecraft:generic.movement_speed' : 'generic.movementSpeed'
+    slowFalling: 0.125
   }
+
+function Physics (mcData, world) {
+  const supportFeature = makeSupportFeature(mcData)
+  const blocksByName = mcData.blocksByName
+
+  // Block Slipperiness
+  // https://www.mcpk.wiki/w/index.php?title=Slipperiness
+  const blockSlipperiness = {}
+  const slimeBlockId = blocksByName.slime_block ? blocksByName.slime_block.id : blocksByName.slime.id
+  blockSlipperiness[slimeBlockId] = 0.8
+  blockSlipperiness[blocksByName.ice.id] = 0.98
+  blockSlipperiness[blocksByName.packed_ice.id] = 0.98
+  if (blocksByName.frosted_ice) { // 1.9+
+    blockSlipperiness[blocksByName.frosted_ice.id] = 0.98
+  }
+  if (blocksByName.blue_ice) { // 1.13+
+    blockSlipperiness[blocksByName.blue_ice.id] = 0.989
+  }
+
+  // Block ids
+  const soulsandId = blocksByName.soul_sand.id
+  const honeyblockId = blocksByName.honey_block ? blocksByName.honey_block.id : -1 // 1.15+
+  const webId = blocksByName.cobweb ? blocksByName.cobweb.id : blocksByName.web.id
+  const waterId = blocksByName.water.id
+  const lavaId = blocksByName.lava.id
+  const ladderId = blocksByName.ladder.id
+  const vineId = blocksByName.vine.id
+  const waterLike = new Set()
+  if (blocksByName.seagrass) waterLike.add(blocksByName.seagrass.id) // 1.13+
+  if (blocksByName.tall_seagrass) waterLike.add(blocksByName.tall_seagrass.id) // 1.13+
+  if (blocksByName.kelp) waterLike.add(blocksByName.kelp.id) // 1.13+
+  const bubblecolumnId = blocksByName.bubble_column ? blocksByName.bubble_column.id : -1 // 1.13+
+  if (blocksByName.bubble_column) waterLike.add(bubblecolumnId)
+
+  physics.movementSpeedAttribute = supportFeature('attributesArePrefixed') ? 'minecraft:generic.movement_speed' : 'generic.movementSpeed'
 
   if (supportFeature('independentLiquidGravity')) {
     physics.waterGravity = 0.02
