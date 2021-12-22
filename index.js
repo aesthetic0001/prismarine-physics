@@ -6,8 +6,8 @@ const features = require('./lib/features')
 const physics = {
   gravity: 0.08, // blocks/tick^2 https://minecraft.gamepedia.com/Entity#Motion_of_entities
   airdrag: Math.fround(1 - 0.02), // actually (1 - drag)
-  yawSpeed: 9.0,
-  pitchSpeed: 9.0,
+  yawSpeed: 6,
+  pitchSpeed: 4,
   sprintSpeed: 1.3,
   sneakSpeed: 0.3,
   stepHeight: 0.6, // how much height can the bot step on without jump
