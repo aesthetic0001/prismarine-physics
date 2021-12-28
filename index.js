@@ -11,7 +11,7 @@ const physics = {
   sprintSpeed: 1.3,
   sneakSpeed: 0.3,
   stepHeight: 0.6, // how much height can the bot step on without jump
-  negligeableVelocity: 0.003, // actually 0.005 for 1.8, but seems fine
+  negligeableVelocity: 0.005, // actually 0.005 for 1.8, but seems fine
   soulsandSpeed: 0.4,
   honeyblockSpeed: 0.4,
   honeyblockJumpSpeed: 0.4,
